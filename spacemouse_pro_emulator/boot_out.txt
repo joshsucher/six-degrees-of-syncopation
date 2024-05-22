@@ -1,0 +1,4 @@
+Adafruit CircuitPython 9.1.0-beta.1-22-gca2a24e8d0-dirty on 2024-05-14; Adafruit QT Py M0 with samd21e18
+Board ID:qtpy_m0
+UID:741F722C344C305020312E581A0505FF
+boot.py output:

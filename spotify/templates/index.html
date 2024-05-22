@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Spotify Song Features</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.4.0/Chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto';
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: #333;
+            overflow: hidden;
+        }
+        .container {
+      	    background: rgba(255, 255, 255, 0.8); /* Use rgba for transparency */
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            width: 80%;
+            max-width: 800px;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        h1 {
+            margin-bottom: 10px;
+        }
+        h2, h3 {
+            margin: 5px 0;
+        }
+        img {
+            border-radius: 8px;
+            margin-bottom: 10px;
+            width: 150px;
+            height: 150px;
+            object-fit: cover;
+        }
+		img#albumArt {
+			border-radius: 8px;
+			margin-bottom: 10px;
+			width: 150px;
+			height: 150px;
+			object-fit: cover;
+			opacity: 1; /* Ensure the album art is fully opaque */
+		}
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            z-index: 1;
+        }
+        form {
+            margin-top: 20px;
+        }
+        input[type="number"] {
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 80px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            background-color: #1DB954;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #1aa34a;
+        }
+        #kaleidoscopeCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 id="songTitle">Loading...</h2>
+        <h3 id="artistName">Loading...</h3>
+        <img id="albumArt" src="" alt="Album Art">
+        <div class="chart-container">
+            <canvas id="songFeatures"></canvas>
+        </div>
+
+<div style="display:none;">
+        <h2>Get Recommendations</h2>
+        <form id="featureForm">
+            <label for="featureAdjustment">Feature Adjustment:</label>
+            <input type="number" id="featureAdjustment" name="featureAdjustment" placeholder="e.g. 1 or -1">
+            <button type="submit">Get Recommendation</button>
+        </form>
+        </div>
+    </div>
+    <canvas id="kaleidoscopeCanvas"></canvas>
+
+    <script>
+    
+    var view;
+    var siphon;
+    let featureValue = null;
+    let currentFeatureName = null;
+    
+	const featureMapping = {
+		1: 'danceability',
+		2: 'energy',
+		3: 'acousticness',
+		4: 'duration_ms',
+		5: 'valence',
+		6: 'popularity',
+		7: 'button1',
+		8: 'button2',
+		9: 'button3',
+		10: 'button4',
+		11: 'button5',
+		12: 'button6',
+		13: 'button7',
+		14: 'button8'
+	};
+
+	const featureColors = {
+		danceability: 'rgb(255,118,117)',  // Red
+		energy: 'rgb(253,203,110)',        // Orange
+		acousticness: 'rgb(255,234,167)',  // Yellow
+		duration_ms: 'rgb(85,239,196)',    // Green
+		valence: 'rgb(116,185,255)',       // Blue
+		popularity: 'rgb(162,155,254)',     // Purple
+		button1: 'rgb(255,87,51)',    // Bright Red
+		button2: 'rgb(255,195,0)',    // Amber
+		button3: 'rgb(244,208,63)',   // Gold
+		button4: 'rgb(39,174,96)',    // Emerald
+		button5: 'rgb(41,128,185)',   // Navy Blue
+		button6: 'rgb(142,68,173)',   // Purple
+		button7: 'rgb(192,57,43)',    // Crimson
+		button8: 'rgb(127,140,141)',  // Gray
+	};
+
+        class View {
+            constructor() {
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+                this.renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('kaleidoscopeCanvas'), alpha: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.camera.position.z = 10;
+            }
+
+            render() {
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        class Siphon {
+            constructor() {
+                this.geometry = new THREE.BoxGeometry(10, 10, 10);
+                this.material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+                this.mesh = new THREE.Mesh(this.geometry, this.material);
+            }
+
+            update() {
+                this.mesh.rotation.x += 0.01;
+                this.mesh.rotation.y += 0.01;
+            }
+
+
+    updateColor(baseColor, featureValue) {
+        const rgb = baseColor.match(/\d+/g).map(Number);
+        const [h, s, l] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
+        
+        // Adjust the hue within a narrow range around the base hue
+        const hueRange = 0.2; // Narrow range around the base hue
+        const adjustedHue = (h + hueRange * (featureValue - 0.5)) % 1;
+
+        this.mesh.material.color.setHSL(adjustedHue, s, l);
+    }
+
+            render(scene) {
+                scene.add(this.mesh);
+            }
+        }
+
+        var polarAreaChart;
+
+        function updateChart(data) {
+            if (polarAreaChart) {
+                polarAreaChart.data.datasets[0].data = [
+                    data.features.danceability,
+                    data.features.energy,
+                    data.features.acousticness,
+                    data.features.duration_ms,
+                    data.features.valence,
+                    data.features.popularity
+                ];
+                polarAreaChart.update();
+            } else {
+                var ctx = document.getElementById('songFeatures').getContext('2d');
+                polarAreaChart = new Chart(ctx, {
+                    type: 'polarArea',
+                    data: {
+                        labels: ["Danceability", "Energy", "Acousticness", "Duration", "Valence", "Popularity"],
+                        datasets: [{
+                            label: "Song Features",
+                            backgroundColor: ['rgb(255,118,117,0.5)', 'rgb(253,203,110,0.5)', 'rgb(255,234,167,0.5)', 'rgb(85,239,196,0.5)', 'rgb(116,185,255,0.5)', 'rgb(162,155,254,0.5)'],
+                            borderColor: ['#ff7675', '#fdcb6e', '#ffeaa7', '#55efc4', '#74b9ff', '#a29bfe'],
+                            data: [
+                                data.features.danceability,
+                                data.features.energy,
+                                data.features.acousticness,
+                                data.features.duration_ms,
+                                data.features.valence,
+                                data.features.popularity
+                            ]
+                        }]
+                    },
+                    options: {
+                        scale: {
+                            ticks: {
+                                min: 0,
+                                max: 100,
+                                backdropColor: 'rgba(255, 255, 255, 0.2)'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Song Features'
+                        }
+                    }
+                });
+            }
+        }
+
+function rgbToHsl(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+
+    let max = Math.max(r, g, b);
+    let min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+
+    if (max === min) {
+        h = s = 0; // achromatic
+    } else {
+        let d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+    }
+
+    return [h, s, l];
+}
+
+    function updateCurrentlyPlaying(data, featureName) {
+            document.getElementById('songTitle').textContent = data.track_name;
+            document.getElementById('artistName').textContent = data.artist_name;
+            document.getElementById('albumArt').src = data.album_art;
+
+    if (!featureColors.hasOwnProperty(featureName)) {
+        console.error("Invalid feature name:", featureName);
+        return;
+    }
+
+    let featureValue = data.features[featureName] / 100; // Ensure feature value is between 0 and 1
+
+    // Update the box color based on the chosen feature
+    siphon.updateColor(featureColors[featureName], featureValue);
+
+            updateChart(data);
+        }
+
+	function fetchCurrentSong(featureName) {
+		fetch('/current_song')
+			.then(response => response.json())
+			.then(data => {
+				if (data.error) {
+					console.error(data.error);
+					return;
+				}
+				updateCurrentlyPlaying(data, currentFeatureName);
+			})
+			.catch(error => console.error('Error fetching current song:', error));
+	}
+
+        function fetchRecommendation(featureName, featureAdjustment) {
+            fetch('/recommendations', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+				body: JSON.stringify({ feature_name: featureName, feature_adjustment: featureAdjustment })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error(data.error);
+                    return;
+                }
+                // Fetch the current song to update the UI
+                fetchCurrentSong(featureName);
+            })
+            .catch(error => console.error('Error fetching recommendation:', error));
+        }
+
+        document.getElementById('featureForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            var featureAdjustment = document.getElementById('featureAdjustment').value;
+		    var featureIndex = Math.abs(featureAdjustment); // Use absolute value to map correctly
+		    currentFeatureName = featureMapping[Math.abs(featureAdjustment)]; // Use absolute value to map correctly
+            fetchRecommendation(currentFeatureName, parseInt(featureAdjustment));
+        });
+
+        window.onload = function() {
+		    currentFeatureName = 'danceability'; // Change to the desired feature
+            fetchCurrentSong();
+
+            const socket = io.connect('http://' + document.domain + ':' + location.port);
+
+		socket.on('new_recommendation', function(data) {
+			if (data && data.feature_name) {
+				currentFeatureName = data.feature_name;
+				fetchCurrentSong(currentFeatureName);
+			} else {
+				console.error("Received malformed data:", data);
+			}
+		});
+
+            view = new View();
+            siphon = new Siphon();
+            siphon.render(view.scene);
+
+            function animate() {
+                requestAnimationFrame(animate);
+                siphon.update();
+                view.render();
+            }
+            animate();
+
+
+            // Get Loopback device ID and set up audio visualization
+            navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then(function(stream) {
+                navigator.mediaDevices.enumerateDevices().then(function(devices) {
+                    var loopbackDevice = devices.find(device => device.label.includes("6DOF") && device.kind === "audioinput");
+                    if (loopbackDevice) {
+                        var deviceId = loopbackDevice.deviceId;
+
+                        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        var analyser = audioCtx.createAnalyser();
+                        analyser.fftSize = 256;
+
+                        navigator.mediaDevices.getUserMedia({ audio: { deviceId: deviceId } }).then(function(stream) {
+                            var source = audioCtx.createMediaStreamSource(stream);
+                            source.connect(analyser);
+function visualize() {
+    var bufferLength = analyser.frequencyBinCount;
+    var dataArray = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(dataArray);
+
+    var avgFrequency = dataArray.reduce((a, b) => a + b, 0) / bufferLength;
+
+    siphon.mesh.scale.set(avgFrequency / 255 + 0.5, avgFrequency / 255 + 0.5, avgFrequency / 255 + 0.5);
+
+    // Determine the feature to use for color (e.g., danceability)
+    let baseColor = featureColors[currentFeatureName];
+
+    // Map the average frequency to a value between 0 and 1
+    featureValue = avgFrequency / 255;
+
+    // Update the box color
+    siphon.updateColor(baseColor, featureValue);
+
+    requestAnimationFrame(visualize);
+}
+                            visualize();
+                        }).catch(function(err) {
+                            console.error('Error accessing audio stream:', err);
+                        });
+                    } else {
+                        console.error('Loopback device not found.');
+                    }
+                }).catch(function(err) {
+                    console.error('Error enumerating devices:', err);
+                });
+            }).catch(function(err) {
+                console.error('Error accessing user media:', err);
+            });
+        };
+    </script>
+</body>
+</html>
