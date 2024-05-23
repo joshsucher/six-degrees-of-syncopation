@@ -29,7 +29,7 @@ This project began with an effort to convert the Spaceball's serial input into U
 
 The custom builds of CircuitPython were required to customize the product, manufacturer, version, VID and PID strings of the USB HID report. (Version is changed in line 92 of supervisor/shared/usb_desc.c where it's labeled bcdDevice; the other strings are in /ports/atmel-samd/boards/qtpy_m0/mpconfigboard.mk.) Also, the custom builds restore the CircuitPython default allowing six distinct USB HID reports (a limit of 1 is imposed via the stock build, due to memory limitations on the QT Py).
 
-I've also included reference PDFs that helped me along my way, including the Spaceball's serial packet documentation and a parser Python script that reads USB HID reports.
+I've also included reference PDFs that helped me along my way (including the Spaceball's serial packet documentation) as well as a Python script that reads, parses and prints the content of each USB HID report.
 
 ## Acknowledgements
 
