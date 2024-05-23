@@ -267,9 +267,18 @@ def recommendations():
     
         random_song = random.choice(recommendations)
     
-        track_uri = f"spotify:track:{random_song['id']}"
+        # track_uri = f"spotify:track:{random_song['id']}" # uncomment me if you'd rather just play the single track, but playback will stop after the track is played
         make_spotify_api_call(sp.start_playback, uris=[track_uri])
-    
+
+        playlist_id = "PLAYLIST_ID" # my Spaceball playlist - so spotify keeps playing infinitely after the track finishes
+
+        make_spotify_api_call(sp.playlist_add_items, playlist_id, [track_uri])
+
+        # Start playback from the playlist at the last added track
+        playlist_tracks = make_spotify_api_call(sp.playlist_tracks, playlist_id)['items']
+        offset = len(playlist_tracks) - 1
+        make_spotify_api_call(sp.start_playback, context_uri=f'spotify:playlist:{playlist_id}', offset={'position': offset})
+
         last_recommendation_time = time.time()  # Update the timestamp for the last recommendation
     
         # Emit an event to notify the front-end
